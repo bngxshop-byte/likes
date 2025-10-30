@@ -3,7 +3,6 @@ import httpx
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import random
 import time
 import threading
 
@@ -78,14 +77,12 @@ def send_like_request(token, TARGET):
         return {
             "token": token[:20]+"...",
             "status_code": resp.status_code,
-            "headers": dict(resp.headers),
             "response_text": resp.text
         }
     except Exception as e:
         return {
             "token": token[:20]+"...",
             "status_code": "error",
-            "headers": {},
             "response_text": str(e)
         }
 
@@ -103,82 +100,68 @@ def send_like():
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
 
-    # جلب معلومات اللاعب قبل الإرسال
-    try:
-        info_url = f"https://info-yo1m.onrender.com/get?uid={player_id}&region=ME"
-        resp = httpx.get(info_url, timeout=10)
-        info_json = resp.json()
-        account_info = info_json.get("AccountInfo", {})
-        player_name = account_info.get("nickname", "Unknown")
-        player_uid = account_info.get("accountId", player_id_int)
-        likes_before = account_info.get("liked", 0)
-    except Exception as e:
-        return jsonify({"error": f"Error fetching player info: {e}"}), 500
-
     # منع الإرسال إذا تم خلال 24 ساعة
     if now - last_sent < 86400:
         return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
 
-    encrypted_id = Encrypt_ID(player_uid)
+    # تحضير TARGET المشفر
+    encrypted_id = Encrypt_ID(player_id_int)
     encrypted_api_data = encrypt_api(f"08{encrypted_id}1007")
     TARGET = bytes.fromhex(encrypted_api_data)
 
-    likes_sent = 0
-    results = []
-    failed = []
+    # جلب كل التوكنات من الـ API
+    try:
+        token_data = httpx.get("https://auto-token-n5t7.onrender.com/api/get_jwt", timeout=50).json()
+        tokens_dict = token_data.get("tokens", {})  # متوقع dict uid->token
+        token_items = list(tokens_dict.items())
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # حلقة مستمرة حتى نصل 100 لايك ناجح
-    while likes_sent < 100:
-        try:
-            token_data = httpx.get("https://auto-token-n5t7.onrender.com/api/get_jwt", timeout=50).json()
-            tokens_dict = token_data.get("tokens", {})
-            token_items = list(tokens_dict.items())
-            random.shuffle(token_items)
-            token_items = token_items[:500]
-        except Exception as e:
-            return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
+    if not token_items:
+        return jsonify({"error": "No tokens returned from token API"}), 500
 
-        with ThreadPoolExecutor(max_workers=500) as executor:
-            futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
-                       for uid, token in token_items}
-            for future in as_completed(futures):
-                if likes_sent >= 100:
-                    break
-                uid, token = futures[future]
+    successes = 0
+    failures = 0
+    results_failed = []
+
+    # نرسل لايك واحد لكل توكن (باستخدام كل التوكنات المُرجعة)
+    max_workers = min(500, len(token_items))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
+                   for uid, token in token_items}
+        for future in as_completed(futures):
+            uid, token = futures[future]
+            try:
                 res = future.result()
-                if res["status_code"] == 200 and res["response_text"].strip() == "":
-                    with lock:
-                        likes_sent += 1
-                        results.append(res)
-                else:
-                    failed.append(res)
+            except Exception as e:
+                # خطأ غير متوقع في التنفيذ
+                failures += 1
+                results_failed.append({"uid": uid, "token_preview": token[:20]+"...", "error": str(e)})
+                continue
 
+            # اعتبر النجاح عندما يكون status 200 ونص الاستجابة فارغ (كما في الكود الأصلي)
+            if res.get("status_code") == 200 and res.get("response_text", "").strip() == "":
+                successes += 1
+            else:
+                failures += 1
+                results_failed.append({
+                    "uid": uid,
+                    "token_preview": res.get("token"),
+                    "status_code": res.get("status_code"),
+                    "response_text": (res.get("response_text") or "")[:200]  # قص لمعاينة
+                })
+
+    # حدث وقت الإرسال الأخير
     last_sent_cache[player_id_int] = now
 
-    # جلب معلومات اللاعب بعد الإرسال
-    likes_after = likes_before
-    try:
-        resp = httpx.get(info_url, timeout=10)
-        info_json = resp.json()
-        account_info = info_json.get("AccountInfo", {})
-        likes_after = account_info.get("liked", likes_before)
-    except Exception:
-        likes_after = likes_before
-
-    likes_added = likes_after - likes_before
-
-    if likes_added == 0:
-        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
-
     return jsonify({
-        "player_id": player_uid,
-        "player_name": player_name,
-        "likes_before": likes_before,
-        "likes_added": likes_added,
-        "likes_after": likes_after,
+        "player_id": player_id_int,
+        "likes_attempted": successes + failures,
+        "likes_successful": successes,
+        "likes_failed": failures,
         "seconds_until_next_allowed": 86400,
-        "success_tokens": results,
-        "failed_tokens": failed
+        # في حالة رغبتك بمعاينة الأخطاء أزل التعليق عن السطر التالي:
+        # "failed_details": results_failed
     })
 
 if __name__ == "__main__":
