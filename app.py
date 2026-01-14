@@ -67,7 +67,7 @@ def send_like_request(token, TARGET):
         'Expect': '100-continue',
         'X-Unity-Version': '2018.4.11f1',
         'X-GA': 'v1 1',
-        'ReleaseVersion': 'OB51',
+        'ReleaseVersion': 'OB52',
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': f'Bearer {token}'
     }
