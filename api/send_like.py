@@ -108,10 +108,10 @@ def send_like():
         info_url = f"https://info-eight-rho.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
         info_json = resp.json()
-        basic_info = info_json.get("basicInfo", {})
-        player_name = basic_info.get("nickname", "Unknown")
-        player_uid = basic_info.get("accountId", player_id)
-        likes_before = basic_info.get("liked", 0)  # هنا التغيير: استخدام "liked" بدلاً من "AccountLikes"
+        captain_info = info_json.get("captainBasicInfo", {})
+        player_name = captain_info.get("nickname", "Unknown")
+        player_uid = captain_info.get("accountId", player_id)
+        likes_before = captain_info.get("liked", 0)  # التغيير هنا: استخدام liked من captainBasicInfo
     except Exception as e:
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
@@ -160,8 +160,8 @@ def send_like():
     try:
         resp = httpx.get(info_url, timeout=10)
         info_json = resp.json()
-        basic_info = info_json.get("basicInfo", {})
-        likes_after = basic_info.get("liked", likes_before)  # هنا التغيير أيضاً
+        captain_info = info_json.get("captainBasicInfo", {})
+        likes_after = captain_info.get("liked", likes_before)  # التغيير هنا أيضاً
     except Exception:
         likes_after = likes_before
 
