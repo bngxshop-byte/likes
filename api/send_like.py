@@ -67,7 +67,7 @@ def send_like_request(token, TARGET):
         'Expect': '100-continue',
         'X-Unity-Version': '2018.4.11f1',
         'X-GA': 'v1 1',
-        'ReleaseVersion': 'OB51',
+        'ReleaseVersion': 'OB52',
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': f'Bearer {token}'
     }
@@ -130,7 +130,7 @@ def send_like():
     # حلقة مستمرة حتى نصل 100 لايك ناجح
     while likes_sent < 100:
         try:
-            token_data = httpx.get("https://auto60tok.onrender.com/api/get_jwt", timeout=50).json()
+            token_data = httpx.get("193.149.164.213:1029/api/get_jwt", timeout=50).json()
             tokens_dict = token_data.get("tokens", {})
             token_items = list(tokens_dict.items())
             random.shuffle(token_items)
