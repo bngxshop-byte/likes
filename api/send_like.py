@@ -105,7 +105,7 @@ def send_like():
 
     # جلب معلومات اللاعب قبل الإرسال من API الجديد
     try:
-        info_url = f"https://info-eight-rho.vercel.app/accinfo?uid={player_id}&region=IND"
+        info_url = f"https://info-eight-rho.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
         info_json = resp.json()
         basic_info = info_json.get("basicInfo", {})
